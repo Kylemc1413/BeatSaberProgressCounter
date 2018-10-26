@@ -1,11 +1,14 @@
-using IllusionPlugin;
+﻿using IllusionPlugin;
 using System;
 using System.Globalization;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using TMPro;
-
+using HMUI;
+using System.Reflection;
+using System.Text;
 namespace ProgressCounter
 {
     public class Plugin : IPlugin
@@ -15,7 +18,6 @@ namespace ProgressCounter
 
         private readonly string[] env = { "DefaultEnvironment", "BigMirrorEnvironment", "TriangleEnvironment", "NiceEnvironment" };
         private bool _init = false;
-        private static HMAsyncRequest _asyncRequest;
 
         public static bool progressTimeLeft = false;
         public static Vector3 scoreCounterPosition = new Vector3(3.25f, 0.5f, 7f);
@@ -24,11 +26,17 @@ namespace ProgressCounter
         public static int progressCounterDecimalPrecision;
         public static bool scoreCounterEnabled = true;
 
+        public static string playerName;
         public static bool pbTrackerEnabled = true;
         public static int noteCount;
         public static int localHighScore;
         public static float pbPercent;
-
+        public static PlatformLeaderboardViewController view;
+        public static int playerScore;
+        private static FieldInfo info;
+        private static StandardLevelSelectionFlowCoordinator _levelSelectionFlowCoordinator;
+        private static StandardLevelDifficultyViewController _levelDifficultyViewController;
+        private static SimpleSegmentedControl _segmentedControl;
         public void OnApplicationQuit()
         {
             SceneManager.activeSceneChanged -= OnSceneChanged;
@@ -48,6 +56,7 @@ namespace ProgressCounter
 
         public void OnApplicationStart()
         {
+
             if (_init) return;
             _init = true;
 
@@ -59,7 +68,7 @@ namespace ProgressCounter
             progressTimeLeft = ModPrefs.GetBool("BeatSaberProgressCounter", "progressTimeLeft", false, true);
             progressCounterDecimalPrecision = ModPrefs.GetInt("BeatSaberProgressCounter", "progressCounterDecimalPrecision", 1, true);
             scoreCounterEnabled = ModPrefs.GetBool("BeatSaberProgressCounter", "scoreCounterEnabled", true, true);
-
+            playerName = ModPrefs.GetString("BeatSaberProgressCounter", "inGameName", "", true);
             SceneManager.activeSceneChanged += OnSceneChanged;
             SceneManager.sceneLoaded += OnSceneLoaded; 
         }
@@ -73,12 +82,51 @@ namespace ProgressCounter
                 new GameObject("Counter").AddComponent<Counter>();
 
                 if (scoreCounterEnabled) new GameObject("ScoreCounter").AddComponent<ScoreCounter>();
+
+
+
+
             }
         }
 
         private void OnSceneChanged(Scene _, Scene scene)
         {
-            if (scene.name == "Menu") ProgressUI.CreateSettingsUI();
+            if (scene.name == "Menu")
+            {
+                ProgressUI.CreateSettingsUI();
+                var levelDetails = Resources.FindObjectsOfTypeAll<StandardLevelDetailViewController>().FirstOrDefault();
+                if (levelDetails != null) levelDetails.didPressPlayButtonEvent += LevelDetails_didPressPlayButtonEvent;
+
+                _levelSelectionFlowCoordinator = Resources.FindObjectsOfTypeAll<StandardLevelSelectionFlowCoordinator>().First();
+                _levelDifficultyViewController = _levelSelectionFlowCoordinator.GetPrivateField<StandardLevelDifficultyViewController>("_levelDifficultyViewController");
+                _levelDifficultyViewController.didSelectDifficultyEvent += OnSelectDifficulty;
+            }
+
+        }
+
+        private void OnSelectDifficulty(StandardLevelDifficultyViewController arg1, IStandardLevelDifficultyBeatmap arg2)
+        {
+            view = Resources.FindObjectsOfTypeAll<PlatformLeaderboardViewController>().FirstOrDefault();
+            if (view != null)
+            {
+                _segmentedControl = view.GetPrivateField<SimpleSegmentedControl>("_scopeSegmentedControl");
+                Type type = typeof(PlatformLeaderboardViewController);
+                info = type.GetField("_scoresScope", BindingFlags.NonPublic | BindingFlags.Static);
+                if (info.GetValue(null).ToString() != "AroundPlayer")
+                {
+                    info.SetValue(null, PlatformLeaderboardsModel.ScoresScope.AroundPlayer);
+                    _segmentedControl.SelectColumn(1);
+                }
+                SharedCoroutineStarter.instance.StartCoroutine(GrabScores(0.2f));
+
+
+
+            }
+        }
+
+        private void LevelDetails_didPressPlayButtonEvent(StandardLevelDetailViewController obj)
+        {
+            SharedCoroutineStarter.instance.StartCoroutine(GrabScores(0f));
         }
 
         public void OnFixedUpdate()
@@ -95,6 +143,7 @@ namespace ProgressCounter
 
         public void OnUpdate()
         {
+
         }
 
         public static void GetSongInfo()
@@ -106,22 +155,13 @@ namespace ProgressCounter
             noteCount = mainGameSceneSetupData.difficultyLevel.beatmapData.notesCount;
             
             //Get Player Score
-            localHighScore = playerLevelStatsData.validScore ? playerLevelStatsData.highScore : 0;
-
-            //If we couldn't grab a local score, we'll try to grab one from the leaderboards
-            if (localHighScore == 0)
+            if(playerScore == 0)
             {
-                string leaderboardID = LeaderboardsModel.GetLeaderboardID(mainGameSceneSetupData.difficultyLevel, mainGameSceneSetupData.gameplayMode);
-                if (_asyncRequest != null)
-                {
-                    _asyncRequest.Cancel();
-                }
-                _asyncRequest = new HMAsyncRequest();
-
-                //Note: I'm leaving "around" as 10 intentionally so that this "looks" like a normal score request
-                //Don't judge. Old habits die hard.
-                PersistentSingleton<PlatformLeaderboardsModel>.instance.GetScoresAroundPlayer(leaderboardID, 10, _asyncRequest, LeaderboardsResultsReturned);
+                Log("Could not Find Leaderboard Score, Attempting to use Local Score");
+                playerScore = playerLevelStatsData.validScore ? playerLevelStatsData.highScore : 0;
             }
+
+
             CalculatePercentage();
         }
 
@@ -132,21 +172,67 @@ namespace ProgressCounter
 
             float roundMultiple = 100 * (float)Math.Pow(10, progressCounterDecimalPrecision);
 
-            pbPercent = (float)Math.Floor(localHighScore / (float)songMaxScore * roundMultiple) / roundMultiple;
+            pbPercent = (float)Math.Floor(playerScore / (float)songMaxScore * roundMultiple) / roundMultiple;
 
             //If the ScoreCounter has already been created, we'll have to set the Personal Best from out here
             var scoreCounter = Resources.FindObjectsOfTypeAll<ScoreCounter>().FirstOrDefault();
             if (scoreCounter != null) scoreCounter.SetPersonalBest(pbPercent);
         }
 
-        //Callback for a leaderboard score request. Sets the PB score to the returned one
-        public static void LeaderboardsResultsReturned(PlatformLeaderboardsModel.GetScoresResult result, PlatformLeaderboardsModel.LeaderboardScore[] scores, int playerScoreIndex)
+
+        public System.Collections.IEnumerator GrabScores(float waitTime)
         {
-            if (result == PlatformLeaderboardsModel.GetScoresResult.OK && playerScoreIndex >= 0)
+            yield return new WaitForSecondsRealtime(waitTime);
+            Log("Grabbing");
+            playerName = ModPrefs.GetString("BeatSaberProgressCounter", "inGameName", "", true);
+            List<LeaderboardTableView.ScoreData> scores = view.GetPrivateField<List<LeaderboardTableView.ScoreData>>("_scores");
+            playerScore = 0;
+            foreach (LeaderboardTableView.ScoreData score in scores)
             {
-                localHighScore = scores.ElementAt(playerScoreIndex).score;
-                CalculatePercentage();
+
+                if (score.playerName.ToLower().Contains(playerName.ToLower() ))
+                {
+                playerScore = score.score;
+                Log("Player SCORE: " + playerScore);
+
+                }
+               
             }
+            yield return new WaitForSecondsRealtime(.1f);
+            if (playerScore == 0)
+            {
+                Log("Second Attempt");
+                yield return new WaitForSecondsRealtime(1f);
+                foreach (LeaderboardTableView.ScoreData score in scores)
+                {
+
+                    if (score.playerName.ToLower().Contains(playerName.ToLower()))
+                    {
+                        playerScore = score.score;
+                        Log("Player SCORE: " + playerScore);
+
+                    }
+                }
+            }
+
         }
+        public string DecodeFromUtf8(string utf8String)
+        {
+            // copy the string as UTF-8 bytes.
+            byte[] utf8Bytes = new byte[utf8String.Length];
+            for (int i = 0; i < utf8String.Length; ++i)
+            {
+                //Debug.Assert( 0 <= utf8String[i] && utf8String[i] <= 255, "the char must be in byte's range");
+                utf8Bytes[i] = (byte)utf8String[i];
+            }
+
+            return Encoding.UTF8.GetString(utf8Bytes, 0, utf8Bytes.Length);
+        }
+        public static void Log(string message)
+        {
+            Console.WriteLine("[{0}] {1}", "ProgressCounter", message);
+        }
+
     }
+
 }
