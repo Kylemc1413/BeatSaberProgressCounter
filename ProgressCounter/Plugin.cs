@@ -9,6 +9,8 @@ using TMPro;
 using HMUI;
 using System.Reflection;
 using System.Text;
+using System.IO;
+
 namespace ProgressCounter
 {
     public class Plugin : IPlugin
@@ -25,7 +27,7 @@ namespace ProgressCounter
 
         public static int progressCounterDecimalPrecision;
         public static bool scoreCounterEnabled = true;
-
+        private static string _filePath = Path.Combine(Environment.CurrentDirectory, "UserData\\PlayerName.txt");
         public static string playerName;
         public static bool pbTrackerEnabled = true;
         public static int noteCount;
@@ -68,9 +70,12 @@ namespace ProgressCounter
             progressTimeLeft = ModPrefs.GetBool("BeatSaberProgressCounter", "progressTimeLeft", false, true);
             progressCounterDecimalPrecision = ModPrefs.GetInt("BeatSaberProgressCounter", "progressCounterDecimalPrecision", 1, true);
             scoreCounterEnabled = ModPrefs.GetBool("BeatSaberProgressCounter", "scoreCounterEnabled", true, true);
-            playerName = ModPrefs.GetString("BeatSaberProgressCounter", "inGameName", "", true);
             SceneManager.activeSceneChanged += OnSceneChanged;
-            SceneManager.sceneLoaded += OnSceneLoaded; 
+            SceneManager.sceneLoaded += OnSceneLoaded;
+
+
+            GetPlayerName();
+
         }
      
         private void OnSceneLoaded(Scene scene, LoadSceneMode arg1)
@@ -184,19 +189,18 @@ namespace ProgressCounter
         {
             yield return new WaitForSecondsRealtime(waitTime);
             Log("Grabbing");
-            playerName = ModPrefs.GetString("BeatSaberProgressCounter", "inGameName", "", true);
+            GetPlayerName();
             List<LeaderboardTableView.ScoreData> scores = view.GetPrivateField<List<LeaderboardTableView.ScoreData>>("_scores");
             playerScore = 0;
             foreach (LeaderboardTableView.ScoreData score in scores)
             {
-
                 if (score.playerName.ToLower().Contains(playerName.ToLower() ))
                 {
                 playerScore = score.score;
                 Log("Player SCORE: " + playerScore);
 
                 }
-               
+
             }
             yield return new WaitForSecondsRealtime(.1f);
             if (playerScore == 0)
@@ -233,6 +237,28 @@ namespace ProgressCounter
             Console.WriteLine("[{0}] {1}", "ProgressCounter", message);
         }
 
+        void GetPlayerName()
+        {
+            if (File.Exists(_filePath))
+            {
+                FileStream file = File.OpenRead(_filePath);
+                StreamReader name = new StreamReader(file, System.Text.Encoding.Unicode);
+                playerName = name.ReadLine();
+                Log(playerName);
+                file.Close();
+            }
+            else
+            {
+                SaveFile(_filePath);
+            }
+        }
+
+        private static void SaveFile(string path)
+        {
+
+            StreamWriter streamWriter = new StreamWriter(path, false, System.Text.Encoding.Unicode);
+            streamWriter.Close();
+        }
     }
 
 }
