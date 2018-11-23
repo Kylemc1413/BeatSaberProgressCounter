@@ -41,7 +41,6 @@ namespace ProgressCounter
         private static SimpleSegmentedControl _segmentedControl;
         public void OnApplicationQuit()
         {
-            SceneManager.activeSceneChanged -= OnSceneChanged;
             SceneManager.sceneLoaded -= OnSceneLoaded;
         }
 
@@ -70,7 +69,6 @@ namespace ProgressCounter
             progressTimeLeft = ModPrefs.GetBool("BeatSaberProgressCounter", "progressTimeLeft", false, true);
             progressCounterDecimalPrecision = ModPrefs.GetInt("BeatSaberProgressCounter", "progressCounterDecimalPrecision", 1, true);
             scoreCounterEnabled = ModPrefs.GetBool("BeatSaberProgressCounter", "scoreCounterEnabled", true, true);
-            SceneManager.activeSceneChanged += OnSceneChanged;
             SceneManager.sceneLoaded += OnSceneLoaded;
 
 
@@ -94,45 +92,7 @@ namespace ProgressCounter
             }
         }
 
-        private void OnSceneChanged(Scene _, Scene scene)
-        {
-            if (scene.name == "Menu")
-            {
-                ProgressUI.CreateSettingsUI();
-                var levelDetails = Resources.FindObjectsOfTypeAll<StandardLevelDetailViewController>().FirstOrDefault();
-                if (levelDetails != null) levelDetails.didPressPlayButtonEvent += LevelDetails_didPressPlayButtonEvent;
 
-                _levelSelectionFlowCoordinator = Resources.FindObjectsOfTypeAll<StandardLevelSelectionFlowCoordinator>().First();
-                _levelDifficultyViewController = _levelSelectionFlowCoordinator.GetPrivateField<StandardLevelDifficultyViewController>("_levelDifficultyViewController");
-                _levelDifficultyViewController.didSelectDifficultyEvent += OnSelectDifficulty;
-            }
-
-        }
-
-        private void OnSelectDifficulty(StandardLevelDifficultyViewController arg1, IStandardLevelDifficultyBeatmap arg2)
-        {
-            view = Resources.FindObjectsOfTypeAll<PlatformLeaderboardViewController>().FirstOrDefault();
-            if (view != null)
-            {
-                _segmentedControl = view.GetPrivateField<SimpleSegmentedControl>("_scopeSegmentedControl");
-                Type type = typeof(PlatformLeaderboardViewController);
-                info = type.GetField("_scoresScope", BindingFlags.NonPublic | BindingFlags.Static);
-                if (info.GetValue(null).ToString() != "AroundPlayer")
-                {
-                    info.SetValue(null, PlatformLeaderboardsModel.ScoresScope.AroundPlayer);
-                    _segmentedControl.SelectColumn(1);
-                }
-                SharedCoroutineStarter.instance.StartCoroutine(GrabScores(0.2f));
-
-
-
-            }
-        }
-
-        private void LevelDetails_didPressPlayButtonEvent(StandardLevelDetailViewController obj)
-        {
-            SharedCoroutineStarter.instance.StartCoroutine(GrabScores(0f));
-        }
 
         public void OnFixedUpdate()
         {
@@ -184,42 +144,7 @@ namespace ProgressCounter
             if (scoreCounter != null) scoreCounter.SetPersonalBest(pbPercent);
         }
 
-
-        public System.Collections.IEnumerator GrabScores(float waitTime)
-        {
-            yield return new WaitForSecondsRealtime(waitTime);
-            Log("Grabbing");
-            GetPlayerName();
-            List<LeaderboardTableView.ScoreData> scores = view.GetPrivateField<List<LeaderboardTableView.ScoreData>>("_scores");
-            playerScore = 0;
-            foreach (LeaderboardTableView.ScoreData score in scores)
-            {
-                if (score.playerName.ToLower().Contains(playerName.ToLower() ))
-                {
-                playerScore = score.score;
-                Log("Player SCORE: " + playerScore);
-
-                }
-
-            }
-            yield return new WaitForSecondsRealtime(.1f);
-            if (playerScore == 0)
-            {
-                Log("Second Attempt");
-                yield return new WaitForSecondsRealtime(1f);
-                foreach (LeaderboardTableView.ScoreData score in scores)
-                {
-
-                    if (score.playerName.ToLower().Contains(playerName.ToLower()))
-                    {
-                        playerScore = score.score;
-                        Log("Player SCORE: " + playerScore);
-
-                    }
-                }
-            }
-
-        }
+        
         public string DecodeFromUtf8(string utf8String)
         {
             // copy the string as UTF-8 bytes.

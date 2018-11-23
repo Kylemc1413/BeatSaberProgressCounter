@@ -9,9 +9,9 @@ namespace ProgressCounter
     internal class ProgressUI : MonoBehaviour
     {
         //Necessary because monobehaviours can't be generics
-        public class DecimalSettingsViewController : ListViewController<int> { }
-        public class PositionSettingsViewController : ListViewController<Tuple<Vector3, string>> { }
-
+      //  public class DecimalSettingsViewController : ListViewController<int> { }
+     //   public class PositionSettingsViewController : ListViewController<Tuple<Vector3, string>> { }
+        /*
         public static void CreateSettingsUI()
         {
             var subMenu = SettingsUI.CreateSubMenu("Progress Counter");
@@ -128,7 +128,9 @@ namespace ProgressCounter
                 };
             }
         }
+            */
     }
+
 }
         
   
