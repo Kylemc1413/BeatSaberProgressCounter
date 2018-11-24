@@ -25,6 +25,8 @@ namespace ProgressCounter
         public static Vector3 scoreCounterPosition = new Vector3(3.25f, 0.5f, 7f);
         public static Vector3 progressCounterPosition = new Vector3(0.25f, -2f, 7.5f);
 
+        public static StandardLevelSceneSetupDataSO _mainGameSceneSetupData = null;
+
         public static int progressCounterDecimalPrecision;
         public static bool scoreCounterEnabled = true;
         private static string _filePath = Path.Combine(Environment.CurrentDirectory, "UserData\\PlayerName.txt");
@@ -35,13 +37,9 @@ namespace ProgressCounter
         public static float pbPercent;
         public static PlatformLeaderboardViewController view;
         public static int playerScore;
-        private static FieldInfo info;
-        private static StandardLevelSelectionFlowCoordinator _levelSelectionFlowCoordinator;
-        private static StandardLevelDifficultyViewController _levelDifficultyViewController;
-        private static SimpleSegmentedControl _segmentedControl;
         public void OnApplicationQuit()
         {
-            SceneManager.sceneLoaded -= OnSceneLoaded;
+            SceneManager.activeSceneChanged -= OnSceneLoaded;
         }
 
         private string FormatVector(Vector3 v)
@@ -69,16 +67,18 @@ namespace ProgressCounter
             progressTimeLeft = ModPrefs.GetBool("BeatSaberProgressCounter", "progressTimeLeft", false, true);
             progressCounterDecimalPrecision = ModPrefs.GetInt("BeatSaberProgressCounter", "progressCounterDecimalPrecision", 1, true);
             scoreCounterEnabled = ModPrefs.GetBool("BeatSaberProgressCounter", "scoreCounterEnabled", true, true);
-            SceneManager.sceneLoaded += OnSceneLoaded;
+            SceneManager.activeSceneChanged += OnSceneLoaded;
 
 
             GetPlayerName();
 
         }
      
-        private void OnSceneLoaded(Scene scene, LoadSceneMode arg1)
+        private void OnSceneLoaded(Scene arg0, Scene scene)
         {
-            if (env.Contains(scene.name))
+            Log(arg0.name);
+            Log(scene.name);
+            if (scene.name == "GameCore")
             {
                 GetSongInfo();
 
@@ -89,7 +89,10 @@ namespace ProgressCounter
 
 
 
+
+
             }
+    
         }
 
 
@@ -108,22 +111,25 @@ namespace ProgressCounter
 
         public void OnUpdate()
         {
-
         }
+
 
         public static void GetSongInfo()
         {
-            var mainGameSceneSetupData = Resources.FindObjectsOfTypeAll<MainGameSceneSetupData>().First();
-            var playerLevelStatsData = PersistentSingleton<GameDataModel>.instance.gameDynamicData.GetCurrentPlayerDynamicData().GetPlayerLevelStatsData(mainGameSceneSetupData.difficultyLevel.level.levelID, mainGameSceneSetupData.difficultyLevel.difficulty, mainGameSceneSetupData.gameplayMode);
-
-            //Get notes count
-            noteCount = mainGameSceneSetupData.difficultyLevel.beatmapData.notesCount;
-            
-            //Get Player Score
-            if(playerScore == 0)
+            if (_mainGameSceneSetupData == null)
             {
-                Log("Could not Find Leaderboard Score, Attempting to use Local Score");
-                playerScore = playerLevelStatsData.validScore ? playerLevelStatsData.highScore : 0;
+                _mainGameSceneSetupData = Resources.FindObjectsOfTypeAll<StandardLevelSceneSetupDataSO>().FirstOrDefault();
+            }
+            //Get notes count
+            noteCount = _mainGameSceneSetupData.difficultyBeatmap.beatmapData.notesCount;
+            PlayerDataModelSO playerData = Resources.FindObjectsOfTypeAll<PlayerDataModelSO>().FirstOrDefault();
+            PlayerLevelStatsData playerLevelData = playerData.currentLocalPlayer.GetPlayerLevelStatsData(_mainGameSceneSetupData.difficultyBeatmap.level.levelID, _mainGameSceneSetupData.difficultyBeatmap.difficulty);
+
+            //Get Player Score
+            if (playerScore == 0)
+            {
+                Log("Attempting to grab Local Score");
+                playerScore = playerLevelData.validScore ? playerLevelData.highScore : 0;
             }
 
 
@@ -144,7 +150,9 @@ namespace ProgressCounter
             if (scoreCounter != null) scoreCounter.SetPersonalBest(pbPercent);
         }
 
-        
+
+
+
         public string DecodeFromUtf8(string utf8String)
         {
             // copy the string as UTF-8 bytes.
