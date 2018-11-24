@@ -39,7 +39,7 @@ namespace ProgressCounter
         public static int playerScore;
         public void OnApplicationQuit()
         {
-            SceneManager.activeSceneChanged -= OnSceneLoaded;
+            SceneManager.activeSceneChanged -= OnSceneChanged;
         }
 
         private string FormatVector(Vector3 v)
@@ -67,14 +67,14 @@ namespace ProgressCounter
             progressTimeLeft = ModPrefs.GetBool("BeatSaberProgressCounter", "progressTimeLeft", false, true);
             progressCounterDecimalPrecision = ModPrefs.GetInt("BeatSaberProgressCounter", "progressCounterDecimalPrecision", 1, true);
             scoreCounterEnabled = ModPrefs.GetBool("BeatSaberProgressCounter", "scoreCounterEnabled", true, true);
-            SceneManager.activeSceneChanged += OnSceneLoaded;
+            SceneManager.activeSceneChanged += OnSceneChanged;
 
 
             GetPlayerName();
 
         }
      
-        private void OnSceneLoaded(Scene arg0, Scene scene)
+        private void OnSceneChanged(Scene arg0, Scene scene)
         {
             Log(arg0.name);
             Log(scene.name);
