@@ -76,8 +76,7 @@ namespace ProgressCounter
      
         private void OnSceneChanged(Scene arg0, Scene scene)
         {
-            Log(arg0.name);
-            Log(scene.name);
+
             if (scene.name == "GameCore")
             {
                 GetSongInfo();
